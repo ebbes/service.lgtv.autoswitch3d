@@ -1,5 +1,12 @@
 Changelog
 
+0.1
+- Support WebOS TVs (and nothing else)
+
+================================================================================
+
+Old changelog (before fork from service.lgtv.remote):
+
 0.1.15
 - Bugfix
 
