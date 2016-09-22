@@ -2,6 +2,7 @@
 <addon id="service.lgtv.autoswitch3d" name="LG Smart TV 3D Switch" version="0.1" provider-name="">
   <requires>
     <import addon="xbmc.python" version="2.20.0"/>
+    <import addon="script.module.six"/>
   </requires>
   <extension point="xbmc.service" library="default.py" start="login" />
   <extension point="xbmc.python.script" library="scan.py" />
