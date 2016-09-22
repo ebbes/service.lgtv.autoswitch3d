@@ -16,7 +16,7 @@ import uuid
 # However, this must not be set or webOS will reject WebSocket requests
 # with "invalid origin". Therefore, shipped websocket package
 # has removed Origin headers (in _handshake.py).
-import websocket  # LGPL
+from . import websocket  # LGPL
 
 ################################################################################
 # HELPER MODULES
