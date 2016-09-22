@@ -21,23 +21,23 @@ import websocket  # LGPL
 ################################################################################
 # HELPER MODULES
 ################################################################################
-from enums import *
-from keymanager import DummyKeyManager
+from .enums import *
+from .keymanager import DummyKeyManager
 
 ################################################################################
 # PYTHON 2/3 COMPATIBILITY
 ################################################################################
 try:
-	# Python 3 has a 2-argument bytes() function.
-	bytes("will_fail_on_python_2", "utf8")
+    # Python 3 has a 2-argument bytes() function.
+    bytes("will_fail_on_python_2", "utf8")
 
-	def str2bytes(s):
-		# we need bytes instead of str in Python 3 in some places
-		return bytes(s, "utf8")
+    def str2bytes(s):
+        # we need bytes instead of str in Python 3 in some places
+        return bytes(s, "utf8")
 except:
-	def str2bytes(s):
-		# Python 2 does not distinguish between str and bytes
-		return s
+    def str2bytes(s):
+        # Python 2 does not distinguish between str and bytes
+        return s
 
 ################################################################################
 # ACTUAL CODE
@@ -450,7 +450,10 @@ class LGTV(object):
 
         # just to make sure
         time.sleep(delay)
-        return (self.get_3D_Mode() == mode, "")
+        if self.get_3D_Mode() == mode:
+            return (True, "")
+        else:
+            return (False, "Sending remote buttons didn't result in correct 3D mode")
 
     def _send_input_command(self, cmd):
         # type: (str) -> (bool, str)
