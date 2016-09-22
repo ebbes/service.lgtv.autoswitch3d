@@ -8,6 +8,7 @@ import json
 import socket
 import time
 import uuid
+import base64
 
 ################################################################################
 # SHIPPED MODULES
@@ -375,9 +376,42 @@ class LGTV(object):
 
         return (True, response['payload'])
 
-    def toast(self, msg):
-        # type: (str) -> (bool, Any)
-        return self._send_command("ssap://system.notifications/createToast", {'message': msg})
+    def toast(self, msg, icon_file=None, file_extension=None, icon_base64=None):
+        # type: (str, str, str, str) -> (bool, Any)
+        # icon should be approx. 80x80 pixels, bigger icons might be
+        # ignored (resulting in blank toast icons) or the toast might fail
+        # completely. PNG and JPG have been successfully tested.
+        #
+        # icon_base64 takes precedence over icon_file if file_extension is given,
+        # otherwise icon_file is used, using the file's extension if
+        # file_extension is empty.
+        if len(msg) > 60:
+            self.log("Warning: Toast message is longer than 60 chars")
+
+        if isinstance(icon_base64, str) and isinstance(file_extension, str):
+            encoded_icon = icon_base64
+        elif isinstance(icon_file, str):
+            try:
+                with open(icon_file, "rb") as f:
+                    encoded_icon = base64.b64encode(f.read()).decode("utf8")
+                    if not file_extension:
+                        file_extension = icon_file.split(".")[-1]
+            except Exception as e:
+                return (False, "Encoding icon failed: " + str(e))
+        else:
+            encoded_icon = None
+
+        payload = {
+            # see https://webos-devrel.github.io/webOS.js/notification.js.html
+            # for additional information
+            'message': msg
+        }
+
+        if encoded_icon:
+            payload['iconData'] = encoded_icon
+            payload['iconExtension'] = file_extension.lower()
+
+        return self._send_command("ssap://system.notifications/createToast", payload)
 
     def disable_3D(self):
         # type: () -> (bool, Any)
