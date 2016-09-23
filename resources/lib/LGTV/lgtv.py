@@ -433,7 +433,7 @@ class LGTV(object):
         # type: () -> (bool, Any)
         return self._send_command("ssap://com.webos.service.ime/sendEnterKey")
 
-    def set_3D_Mode(self, mode, delay=1):
+    def set_3D_Mode(self, mode):
         # type: (Display3dMode, float) -> (bool, Any)
         if mode < Display3dMode.OFF or mode > Display3dMode.LINE_INTERLEAVE_HALF:
             return (False, "Invalid 3D mode")
@@ -450,7 +450,7 @@ class LGTV(object):
         if current_mode != Display3dMode.OFF:
             # first disable 3D so that we will get the enable-menu when pressing the 3D button
             if not self.disable_3D()[0]:
-                return (False, "Could not disable 3D first")
+                return (False, "Could not disable 3D first.")
         else:
             # currently in 2D. Enable 3D to see which 3D mode was saved and disable it again
             self.enable_3D()
@@ -465,10 +465,11 @@ class LGTV(object):
         # the mode that the TV will initially switch to when enabling 3D via
         # remote control.
 
+        time.sleep(0.25) # just to make sure
         # enable 3D
         self.send_button(RemoteButton.MODE_3D)
-        # about 1 second is required, 1.5 just to make sure.
-        time.sleep(delay)
+        # about 1 second seems to be minimum, 1.5 just to make sure.
+        time.sleep(1.5)
 
         delta = mode - current_mode
         if delta < 0:
@@ -480,14 +481,41 @@ class LGTV(object):
         for i in range(delta):
             self.send_button(button)
 
-        self.send_click()
+        time.sleep(0.25)
+        current_mode = self.get_3D_Mode()
+        if current_mode == mode:
+            # timing worked
+            self.send_click() # close menu
+            return (True, "")
+
+        if current_mode == Display3dMode.OFF:
+            # shouldn't happen?!
+            sself.send_click() # close menu
+            return (False, "Sending remote buttons resulted in 3D turned off.")
+        if current_mode == Display3dMode.ERROR:
+            self.send_click() # close menu
+            return (False, "Could not get current 3D mode. Something went wrong.")
+
+        # we're not in the correct mode, try one last time
+        delta = mode - current_mode
+        if delta < 0:
+            button = RemoteButton.LEFT
+            delta = -delta
+        else:
+            button = RemoteButton.RIGHT
+
+        for i in range(delta):
+            self.send_button(button)
+
+        time.sleep(0.25)
+        self.send_click() # close menu
 
         # just to make sure
-        time.sleep(delay)
+        time.sleep(0.25)
         if self.get_3D_Mode() == mode:
             return (True, "")
-        else:
-            return (False, "Sending remote buttons didn't result in correct 3D mode")
+
+        return (False, "Sending remote buttons didn't result in correct 3D mode.")
 
     def _send_input_command(self, cmd):
         # type: (str) -> (bool, str)

@@ -75,6 +75,8 @@ class Service(xbmc.Player):
             success = self.lgtv.connect(self.lg_host, __addonname__)
             if not success:
                 raise Exception("LGTV.connect() failed")
+            tools.notifyLog("Connected to TV at %s" % self.lg_host)
+            tools.notifyOSD(__addonname__, __LS__(30102) % self.lg_host, icon=__IconConnected__)
         except Exception as e:
             # try new discovery
             if not host_was_empty and self.enable_discovery:
@@ -87,6 +89,8 @@ class Service(xbmc.Player):
                         success = self.lgtv.connect(self.lg_host, __addonname__)
                         if not success:
                             raise Exception("LGTV.connect() failed")
+                        tools.notifyLog("Connected to TV at %s" % self.lg_host)
+                        tools.notifyOSD(__addonname__, __LS__(30102) % self.lg_host, icon=__IconConnected__)
                     except Exception as e:
                         tools.notifyLog("Could not connect to TV at %s: %s" % (self.lg_host, str(e)), level=xbmc.LOGERROR)
                         tools.notifyOSD(__addonname__, __LS__(30100) % self.lg_host, icon=__IconError__)
@@ -156,6 +160,10 @@ class Service(xbmc.Player):
     def switch3D(self):
         if self.getStereoscopicMode():
             tools.notifyLog('switching to 3D mode %s' % self.mode3D, level=xbmc.LOGDEBUG)
+            success, msg = self.lgtv.set_3D_Mode(self.mode3D)
+            if success:
+                return
+            # try a second time
             success, msg = self.lgtv.set_3D_Mode(self.mode3D)
             if not success:
                 tools.notifyLog(msg)

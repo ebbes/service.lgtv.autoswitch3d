@@ -71,3 +71,7 @@ msgstr "Konnte nicht mit dem LG Smart TV auf %s verbinden."
 msgctxt "#30101"
 msgid "No LG Smart TV available."
 msgstr "Kein LG Smart TV verfügbar."
+
+msgctxt "#30102"
+msgid "Connected to LG Smart TV at %s."
+msgstr "Mit LG Smart TV auf %s verbunden."

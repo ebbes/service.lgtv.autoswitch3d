@@ -71,3 +71,7 @@ msgstr ""
 msgctxt "#30101"
 msgid "No LG Smart TV available."
 msgstr ""
+
+msgctxt "#30102"
+msgid "Connected to LG Smart TV at %s."
+msgstr ""
