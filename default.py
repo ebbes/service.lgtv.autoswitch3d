@@ -25,22 +25,10 @@ __path__ = __addon__.getAddonInfo('path')
 __version__ = __addon__.getAddonInfo('version')
 __LS__ = __addon__.getLocalizedString
 
-__IconConnected__ = xbmc.translatePath(os.path.join( __path__,'resources', 'media', 'ok.png'))
-__IconError__ = xbmc.translatePath(os.path.join( __path__,'resources', 'media', 'fail.png'))
-__IconDefault__ = xbmc.translatePath(os.path.join( __path__,'resources', 'media', 'default.png'))
-
-class Monitor(xbmc.Monitor):
-    def __init__(self, service):
-        xbmc.Monitor.__init__(self)
-        self.service = service
-        self.abortRequested = False
-
-    def onSettingsChanged(self):
-        # maybe needed some day?
-        pass
-
-    def onAbortRequested(self):
-        self.abortRequested = True
+__IconConnected__ = xbmc.translatePath(os.path.join(__path__,'resources', 'media', 'ok.png'))
+__IconError__ = xbmc.translatePath(os.path.join(__path__,'resources', 'media', 'fail.png'))
+__IconDefault__ = xbmc.translatePath(os.path.join(__path__,'resources', 'media', 'default.png'))
+__IconKodi__ = xbmc.translatePath(os.path.join(__path__, 'resources', 'media', 'kodi.png'))
 
 class Service(xbmc.Player):
     def __init__(self):
@@ -50,7 +38,6 @@ class Service(xbmc.Player):
         self.isPlaying3D = None
         self.mode3D = Display3dMode.OFF
 
-        self.monitor = Monitor(self)
         self.readSettings()
 
     def readSettings(self):
@@ -76,7 +63,8 @@ class Service(xbmc.Player):
             if not success:
                 raise Exception("LGTV.connect() failed")
             tools.notifyLog("Connected to TV at %s" % self.lg_host)
-            tools.notifyOSD(__addonname__, __LS__(30102) % self.lg_host, icon=__IconConnected__)
+            #tools.notifyOSD(__addonname__, __LS__(30102) % self.lg_host, icon=__IconConnected__)
+            self.lgtv.toast(__LS__(30103), icon_file=__IconKodi__)
         except Exception as e:
             # try new discovery
             if not host_was_empty and self.enable_discovery:
@@ -90,7 +78,8 @@ class Service(xbmc.Player):
                         if not success:
                             raise Exception("LGTV.connect() failed")
                         tools.notifyLog("Connected to TV at %s" % self.lg_host)
-                        tools.notifyOSD(__addonname__, __LS__(30102) % self.lg_host, icon=__IconConnected__)
+                        #tools.notifyOSD(__addonname__, __LS__(30102) % self.lg_host, icon=__IconConnected__)
+                        self.lgtv.toast(__LS__(30103), icon_file=__IconKodi__)
                     except Exception as e:
                         tools.notifyLog("Could not connect to TV at %s: %s" % (self.lg_host, str(e)), level=xbmc.LOGERROR)
                         tools.notifyOSD(__addonname__, __LS__(30100) % self.lg_host, icon=__IconError__)
@@ -163,24 +152,41 @@ class Service(xbmc.Player):
             success, msg = self.lgtv.set_3D_Mode(self.mode3D)
             if success:
                 return
-            # try a second time
+
+            # in case something _seriously_ failed during previous communication, try clean reconnect
+            if not self.lgtv.is_connected():
+                tools.notifyLog("Not connected, attempting reconnect")
+                success = self.lgtv.connect(self.lg_host, __addonname__)
+                if not success:
+                    tools.notifyLog("Reconnect failed")
+                    tools.notifyOSD(__addonname__, __LS__(30100) % self.lg_host, icon=__IconError__)
+                    return
+
+                tools.notifyLog("Reconnected to TV at %s" % self.lg_host)
+                #tools.notifyOSD(__addonname__, __LS__(30102) % self.lg_host, icon=__IconConnected__)
+                self.lgtv.toast(__LS__(30104), icon_file=__IconKodi__)
+
             success, msg = self.lgtv.set_3D_Mode(self.mode3D)
             if not success:
                 tools.notifyLog(msg)
-                tools.notifyOSD(__addonname__, msg, icon=__IconError__)
+                if not self.lgtv.toast(msg, icon_file=__IconKodi__):
+                    tools.notifyOSD(__addonname__, msg, icon=__IconError__)
 
-    def keep_alive(self):
-        try:
-            tools.notifyLog('Service running')
+    def keepConnectionAlive(self):
+        self.lgtv.send_pong()
 
-            while not self.monitor.abortRequested:
-                if self.monitor.waitForAbort(POLL_INTERVAL):
-                    break
+if __name__ == '__main__':
+    SwitcherService = Service()
 
-        except Exception as e:
-            tools.notifyLog("Exception: " + str(e))
+    monitor = xbmc.Monitor()
 
-SwitcherService = Service()
-SwitcherService.keep_alive()
-del SwitcherService
-tools.notifyLog('Service finished')
+    while not monitor.abortRequested():
+        if monitor.waitForAbort(60):
+            break
+        # send pong message (does not result in server response)
+        # to keep connection alive (server will close idle connections
+        # after 5 minutes)
+        SwitcherService.keepConnectionAlive()
+
+    del SwitcherService
+    tools.notifyLog('Service finished')

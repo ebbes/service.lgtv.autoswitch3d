@@ -75,3 +75,11 @@ msgstr ""
 msgctxt "#30102"
 msgid "Connected to LG Smart TV at %s."
 msgstr ""
+
+msgctxt "#30103"
+msgid "LG Smart TV 3D Switch connected"
+msgstr ""
+
+msgctxt "#30104"
+msgid "LG Smart TV 3D Switch reconnected"
+msgstr ""

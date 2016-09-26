@@ -75,3 +75,11 @@ msgstr "Kein LG Smart TV verfügbar."
 msgctxt "#30102"
 msgid "Connected to LG Smart TV at %s."
 msgstr "Mit LG Smart TV auf %s verbunden."
+
+msgctxt "#30103"
+msgid "LG Smart TV 3D Switch verbunden"
+msgstr ""
+
+msgctxt "#30104"
+msgid "LG Smart TV 3D Switch reconnected"
+msgstr "LG Smart TV 3D Switch wiederverbunden"

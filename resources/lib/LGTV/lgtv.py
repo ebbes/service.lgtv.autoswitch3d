@@ -35,10 +35,16 @@ try:
     def str2bytes(s):
         # we need bytes instead of str in Python 3 in some places
         return bytes(s, "utf8")
+
+    # for instance checking in python 3
+    basestring = (str, bytes)
+    unicode = str
 except:
     def str2bytes(s):
         # Python 2 does not distinguish between str and bytes
         return s
+
+    # basestring and unicode are correctly defined
 
 ################################################################################
 # ACTUAL CODE
@@ -212,7 +218,8 @@ class LGTV(object):
 
         self.is_paired = False
 
-        if not isinstance(host, str):
+        if not isinstance(host, basestring):
+            self.log("host is no instance of str: '" + str(host) + "'")
             return False
 
         host = self._sanitize_host_string(host)
@@ -238,9 +245,10 @@ class LGTV(object):
         self.wsocket.send(pairing_request)
 
         try:
-            response = json.loads(self.wsocket.recv())
+            received = self.wsocket.recv()
+            response = json.loads(received)
         except Exception as e:
-            self.log("Could not decode response:", str(e))
+            self.log("Could not decode response '" + str(received) + "' received after sending pairing request:" + str(e))
             return False
 
         if response.get('id') != msg_id:
@@ -254,9 +262,10 @@ class LGTV(object):
             # not paired yet, next message will be pairing status
             # so load another message
             try:
-                response = json.loads(self.wsocket.recv())
+                received = self.wsocket.recv()
+                response = json.loads(received)
             except Exception as e:
-                self.log("Could not decode response:", str(e))
+                self.log("Could not decode response '" + str(received) + "' received as second message after sending pairing request:" + str(e))
                 return False
 
         if response.get('id') != msg_id:
@@ -335,14 +344,17 @@ class LGTV(object):
         self.pointer_socket.close()
         self.pointer_socket = None
 
-    def _send_command(self, uri, payload=None):
+    def _send_command(self, uri, payload=None, resending=False):
         # type: (str, Any) -> (bool, Any)
         # Tuple's second component is dict if first component is True.
         if not self.is_connected():
             if self.last_host is None:
                 return (False, "Not connected")
-            if not self.connect(self.last_host) or not self.is_connected():
+            if not self.connect(self.last_host):
                 return (False, "Not connected, reconnect failed")
+            if not self.is_connected():
+                return (False, "is_connected() returned False after successful reconnect")
+            self.log("Successfully reconnected")
 
         msg_id = self.random_prefix + str(self.command_counter)
         self.command_counter += 1
@@ -357,10 +369,19 @@ class LGTV(object):
 
         self.wsocket.send(json.dumps(msg))
 
+        received = self.wsocket.recv()
+        if len(received) == 0 or not self.wsocket.connected:
+            if not resending:
+                self.log("Connection closed by server, probably timed out.")
+                # try connecting one more time
+                return self._send_command(uri, payload, resending=True)
+            self.log("Connection closed by server, probably timed out  (second time, not trying again).")
+            return (False, "Connection closed by server, probably timed out (second time, not trying again).")
+
         try:
-            response = json.loads(self.wsocket.recv())
+            response = json.loads(received)
         except Exception as e:
-            return (False, "Could not decode response:" + str(e))
+            return (False, "Could not decode response '" + str(received) + "' received after sending command:" + str(e))
 
         if response.get('id') != msg_id:
             return (False, "Response does not match sent message id. Response order might be mismatched. We're screwed.")
@@ -388,9 +409,9 @@ class LGTV(object):
         if len(msg) > 60:
             self.log("Warning: Toast message is longer than 60 chars")
 
-        if isinstance(icon_base64, str) and isinstance(file_extension, str):
+        if isinstance(icon_base64, basestring) and isinstance(file_extension, basestring):
             encoded_icon = icon_base64
-        elif isinstance(icon_file, str):
+        elif isinstance(icon_file, basestring):
             try:
                 with open(icon_file, "rb") as f:
                     encoded_icon = base64.b64encode(f.read()).decode("utf8")
@@ -425,7 +446,7 @@ class LGTV(object):
         # type: () -> Display3dMode
         success, payload = self._send_command("ssap://com.webos.service.tv.display/get3DStatus")
         if not success:
-            self.log("Could not get current 3D mode:", payload)
+            self.log("get_3D_Mode: Could not get current 3D mode:", payload)
             return Display3dMode.ERROR
         return Display3dMode.from_string(payload.get('status3D', {}).get('pattern'))
 
@@ -441,7 +462,7 @@ class LGTV(object):
         if current_mode == mode:
             return (True, "")
         if current_mode == Display3dMode.ERROR:
-            return (False, "Could not get current 3D mode. Something went wrong.")
+            return (False, "set_3D_Mode: Could not get current 3D mode. Something went wrong.")
 
         if mode == Display3dMode.OFF:
             # simply disable 3D
@@ -490,13 +511,14 @@ class LGTV(object):
 
         if current_mode == Display3dMode.OFF:
             # shouldn't happen?!
-            sself.send_click() # close menu
+            self.send_click() # close menu
             return (False, "Sending remote buttons resulted in 3D turned off.")
         if current_mode == Display3dMode.ERROR:
             self.send_click() # close menu
             return (False, "Could not get current 3D mode. Something went wrong.")
 
         # we're not in the correct mode, try one last time
+        time.sleep(2)
         delta = mode - current_mode
         if delta < 0:
             button = RemoteButton.LEFT
@@ -591,3 +613,9 @@ class LGTV(object):
         # example:
         # {'scenario': 'mastervolume_ext_speaker_optical', 'volume': -1, 'mute': False, 'returnValue': True}
         return self._send_command("ssap://audio/getStatus")
+
+    def send_pong(self):
+        if not self.is_connected():
+            return False
+        self.wsocket.pong(b"")
+        return True
