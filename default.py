@@ -15,8 +15,9 @@ from resources.lib.LGTV.enums import Display3dMode
 # mode when starting a video.
 WAIT_FOR_MODE_SELECT = 60
 
-# interval to poll for addon abort requests
-POLL_INTERVAL = 1
+# interval to send pong (keepalive) requests
+# (keep under 5 minutes to prevent connection drops by TV)
+PONG_INTERVAL = 60
 
 __addon__ = xbmcaddon.Addon()
 __addonname__ = __addon__.getAddonInfo('name')
@@ -181,7 +182,7 @@ if __name__ == '__main__':
     monitor = xbmc.Monitor()
 
     while not monitor.abortRequested():
-        if monitor.waitForAbort(60):
+        if monitor.waitForAbort(PONG_INTERVAL):
             break
         # send pong message (does not result in server response)
         # to keep connection alive (server will close idle connections
