@@ -39,3 +39,26 @@ class Display3dMode(object):
         if s == '2d':
             return Display3dMode.OFF
         return Display3dMode.ERROR
+
+    @staticmethod
+    def to_string(s):
+        # type: (int) -> str
+        if s == Display3dMode.ERROR:
+            return "Error"
+        if s == Display3dMode.OFF:
+            return "Off"
+        if s == Display3dMode.CONVERT_2D_TO_3D:
+            return "2D to 3D"
+        if s == Display3dMode.SIDE_SIDE_HALF:
+            return "Side by side"
+        if s == Display3dMode.TOP_BOTTOM:
+            return "Top and bottom"
+        if s == Display3dMode.CHECK_BOARD:
+            return "Check board"
+        if s == Display3dMode.FRAME_SEQUENTIAL:
+            return "Frame sequential"
+        if s == Display3dMode.COLUMN_INTERLEAVE:
+            return "Column interleave"
+        if s == Display3dMode.LINE_INTERLEAVE_HALF:
+            return "Line interleave"
+        return "Unknown (" + str(s) + ")"

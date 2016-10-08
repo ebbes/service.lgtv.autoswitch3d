@@ -34,6 +34,7 @@ __IconKodi__ = xbmc.translatePath(os.path.join(__path__, 'resources', 'media', '
 class Service(xbmc.Player):
     def __init__(self):
         xbmc.Player.__init__(self)
+        self.monitor = xbmc.Monitor()
         self.lgtv = LGTV(KodiKeyManager(), log=tools.simpleLog)
 
         self.isPlaying3D = None
@@ -122,7 +123,7 @@ class Service(xbmc.Player):
                 if 'result' in res and 'stereoscopicmode' in res['result']:
                     res = res['result']['stereoscopicmode'].get('mode')
                     if self.mode3D != mode[res]:
-                        tools.notifyLog('Stereoscopic mode has changed to %s' % (mode[res]))
+                        tools.notifyLog('Stereoscopic mode has changed to %s' % (Display3dMode.to_string(mode[res])))
                         self.mode3D = mode[res]
                         return True
                     _poll -= 1
@@ -177,17 +178,18 @@ class Service(xbmc.Player):
         self.lgtv.send_pong()
 
 if __name__ == '__main__':
-    SwitcherService = Service()
+    service = Service()
 
-    monitor = xbmc.Monitor()
-
-    while not monitor.abortRequested():
-        if monitor.waitForAbort(PONG_INTERVAL):
+    while not service.monitor.abortRequested():
+        if service.monitor.waitForAbort(PONG_INTERVAL):
             break
         # send pong message (does not result in server response)
         # to keep connection alive (server will close idle connections
         # after 5 minutes)
-        SwitcherService.keepConnectionAlive()
+        service.keepConnectionAlive()
 
-    del SwitcherService
+    if service.lgtv.is_connected():
+        service.lgtv.disable_3D()
+
+    del service
     tools.notifyLog('Service finished')

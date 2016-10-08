@@ -155,6 +155,7 @@ class LGTV(object):
     @staticmethod
     def _sanitize_host_string(host):
         # type: (str) -> str
+        # another possibility is encrypted WebSocket (wss://) at port 3001.
         if not host.startswith("ws://"):
             host = "ws://" + host
         if host.endswith("/"):
@@ -169,6 +170,9 @@ class LGTV(object):
     def _generate_pairing_request(msg_id, app_name, client_key=None):
         # type: (str) -> (str, str)
 
+        # this pairing request will not allow some commands, e.g. getting
+        # webOS software information via ssap://com.webos.service.update/getCurrentSWInformation
+        # (401 insufficient permissions). Looks like we're lacking a valid signature.
         pairing_request = {
             "type": "register",
             "id": msg_id,
@@ -454,90 +458,117 @@ class LGTV(object):
         # type: () -> (bool, Any)
         return self._send_command("ssap://com.webos.service.ime/sendEnterKey")
 
-    def set_3D_Mode(self, mode):
+    def set_3D_Mode(self, mode, button_delay=1.5):  # ~ 1 second seems to be minimum, 1.5 just to make sure.
         # type: (Display3dMode, float) -> (bool, Any)
         if mode < Display3dMode.OFF or mode > Display3dMode.LINE_INTERLEAVE_HALF:
             return (False, "Invalid 3D mode")
         current_mode = self.get_3D_Mode()
         if current_mode == mode:
+            # already correct mode
             return (True, "")
         if current_mode == Display3dMode.ERROR:
             return (False, "set_3D_Mode: Could not get current 3D mode. Something went wrong.")
 
         if mode == Display3dMode.OFF:
-            # simply disable 3D
+            # easiest variant: simply disable 3D.
             return self.disable_3D()
 
         if current_mode != Display3dMode.OFF:
-            # first disable 3D so that we will get the enable-menu when pressing the 3D button
+            # we are in any incorrect 3D mode. Disable 3D to be able to enable it again via remote button.
             if not self.disable_3D()[0]:
-                return (False, "Could not disable 3D first.")
+                return (False, "Could not initially disable 3D: " + str(result[1]))
         else:
-            # currently in 2D. Enable 3D to see which 3D mode was saved and disable it again
-            self.enable_3D()
+            # we were in 2D initially. We'll quickly enable 3D to see which mode we're
+            # in. If this is the correct one, we can skip sending remote buttons completely
+            # (saves time if only watching movies of one 3D mode most of the time)
+            result = self.enable_3D()
+            if not result[0]:
+                return (False, "Could not enable 3D to check current 3D mode: " + str(result[1]))
+
+            current_mode = self.get_3D_Mode()
+            if current_mode == Display3dMode.ERROR:
+                return (False, "Could not get current 3D mode. Something went wrong.")
+            if current_mode == mode:
+                # last 3D mode was correct
+                return (True, "")
+
+            # last 3D mode was incorrect. Disable again so that sending remote 3D button enables it
+            result = self.disable_3D()
+            if not result[0]:
+                return (False, "Could not disable 3D after checking current 3D mode: " + str(result[1]))
+
+        # enable 3D via remote 3D button
+        self.send_button(RemoteButton.MODE_3D)
+        # wait for menu to open
+        time.sleep(button_delay)
+
+        # in case the input pointer socket times out (which we cannot check reliably),
+        # sending RemoteButton.MODE_3D will not have any effect.
+        # Therefore, if this happens, we will reconnect the socket and try again
+        # _once_. The easiest way is wrapping the code in a loop...
+        had_error = False
+        for _ in range(2):
+            current_mode = self.get_3D_Mode()
+            if current_mode == Display3dMode.ERROR:
+                return (False, "Could not get current 3D mode. Something went wrong.")
+            if current_mode == Display3dMode.OFF:
+                if not had_error:
+                    # reconnect input pointer since it probably timed out
+                    self.log("Sending 3D remote button resulted in 3D turned off. Trying to reconnect input pointer socket.")
+                    self._disconnect_input_pointer()
+                    if not self._connect_input_pointer():
+                        return (False, "Failed to reconnect input pointer socket after sending 3D remote button failed.")
+                    # resend 3D remote button
+                    self.send_button(RemoteButton.MODE_3D)
+                    time.sleep(button_delay)
+                    had_error = True
+                    continue
+                else:
+                    return (False, "Sending 3D remote button resulted in 3D turned off, even after reconnecting input pointer socket.")
+
+            if had_error:
+                self.log("Sending 3D remote button succeeded after reconnecting input pointer socket.")
+            # no error, break loop
+            break
+
+        # send left/right buttons in menu to select correct mode.
+        # this is tried at most twice (in case timing is wrong during first try)
+        for i in range(2):
+            delta = mode - current_mode
+            button = RemoteButton.LEFT if delta < 0 else RemoteButton.RIGHT
+            for i in range(abs(delta)):
+                self.send_button(button)
+                # add some delay in second try
+                time.sleep(i * 0.25)
+
+            # wait to make sure changes are in effect
+            time.sleep(0.25)
+
             current_mode = self.get_3D_Mode()
             if current_mode == mode:
-                # saved mode was correct
+                # timing worked
+                self.send_click() # close menu
                 return (True, "")
-            self.disable_3D()
 
-        # now the following holds:
-        # we want to switch to a specific 3D mode and current_mode holds
-        # the mode that the TV will initially switch to when enabling 3D via
-        # remote control.
+            if current_mode == Display3dMode.OFF:
+                # shouldn't happen?!
+                self.send_click() # close menu
+                return (False, "Sending remote button sequence resulted in 3D turned off.")
+            if current_mode == Display3dMode.ERROR:
+                self.send_click() # close menu
+                return (False, "Could not get current 3D mode. Something went wrong.")
 
-        time.sleep(0.25) # just to make sure
-        # enable 3D
-        self.send_button(RemoteButton.MODE_3D)
-        # about 1 second seems to be minimum, 1.5 just to make sure.
-        time.sleep(1.5)
+            # current_mode != mode holds from now on
 
-        delta = mode - current_mode
-        if delta < 0:
-            button = RemoteButton.LEFT
-            delta = -delta
-        else:
-            button = RemoteButton.RIGHT
+            if i == 0:
+                # try again after delay
+                time.sleep(1)
+                continue
 
-        for i in range(delta):
-            self.send_button(button)
-
-        time.sleep(0.25)
-        current_mode = self.get_3D_Mode()
-        if current_mode == mode:
-            # timing worked
-            self.send_click() # close menu
-            return (True, "")
-
-        if current_mode == Display3dMode.OFF:
-            # shouldn't happen?!
-            self.send_click() # close menu
-            return (False, "Sending remote buttons resulted in 3D turned off.")
-        if current_mode == Display3dMode.ERROR:
-            self.send_click() # close menu
-            return (False, "Could not get current 3D mode. Something went wrong.")
-
-        # we're not in the correct mode, try one last time
-        time.sleep(2)
-        delta = mode - current_mode
-        if delta < 0:
-            button = RemoteButton.LEFT
-            delta = -delta
-        else:
-            button = RemoteButton.RIGHT
-
-        for i in range(delta):
-            self.send_button(button)
-
-        time.sleep(0.25)
-        self.send_click() # close menu
-
-        # just to make sure
-        time.sleep(0.25)
-        if self.get_3D_Mode() == mode:
-            return (True, "")
-
-        return (False, "Sending remote buttons didn't result in correct 3D mode.")
+            # failed after second try, give up.
+            # close menu
+            self.send_click()
+            return (False, "Sending remote buttons resulted in mode " + Display3dMode.to_string(current_mode) + " but mode " + Display3dMode.to_string(mode) + " was expected.")
 
     def _send_input_command(self, cmd):
         # type: (str) -> (bool, str)
@@ -545,6 +576,7 @@ class LGTV(object):
             return (False, "Could not connect to InputPointer socket")
 
         self.pointer_socket.send(cmd)
+        # unfortunately, we cannot check whether the socket timed out...
         return (True, "")
 
     def send_button(self, button):
@@ -614,8 +646,17 @@ class LGTV(object):
         # {'scenario': 'mastervolume_ext_speaker_optical', 'volume': -1, 'mute': False, 'returnValue': True}
         return self._send_command("ssap://audio/getStatus")
 
+    # not working due to insufficient permissions (pairing request lacking valid signature?)
+    #def get_software_info(self):
+    #    # type: () -> (bool, Any)
+    #    return self._send_command("ssap://com.webos.service.update/getCurrentSWInformation")
+
     def send_pong(self):
+        # type: () -> bool
         if not self.is_connected():
             return False
         self.wsocket.pong(b"")
+        if self._is_pointer_connected():
+            # also pong pointer socket.
+            self.pointer_socket.pong(b"")
         return True
