@@ -1,7 +1,5 @@
 import xbmc, xbmcaddon
 import os
-import json
-import re
 from resources.lib import tools
 from resources.lib.keymanager import KodiKeyManager
 
@@ -14,6 +12,7 @@ from resources.lib.LGTV.enums import Display3dMode
 # False. This accounts for the user manually selecting the 3D
 # mode when starting a video.
 WAIT_FOR_MODE_SELECT = 60
+WAIT_FOR_MODE_SELECT_INTERVAL = 0.5  # seconds
 
 # interval to send pong (keepalive) requests
 # (keep under 5 minutes to prevent connection drops by TV)
@@ -32,22 +31,19 @@ __IconDefault__ = xbmc.translatePath(os.path.join(__path__,'resources', 'media',
 __IconKodi__ = xbmc.translatePath(os.path.join(__path__, 'resources', 'media', 'kodi.png'))
 
 class Service(xbmc.Player):
-    THREE_D_MODE_MAPPING = {
-        "off": Display3dMode.OFF,
-        "split_vertical": Display3dMode.SIDE_SIDE_HALF,
-        "split_horizontal": Display3dMode.TOP_BOTTOM,
-        "row_interleaved": Display3dMode.LINE_INTERLEAVE_HALF,
-        "hardware_based": Display3dMode.FRAME_SEQUENTIAL,       # TODO: correct?
-        "anaglyph_cyan_red": Display3dMode.OFF,                 # works without 3D mode set
-        "anaglyph_green_magenta": Display3dMode.OFF,            # works without 3D mode set
-        "monoscopic": Display3dMode.OFF
-    }
-    JSONRPC_QUERY = {
-            "jsonrpc": "2.0",
-            "method": "GUI.GetProperties",
-            "params": {"properties": ["stereoscopicmode"]},
-            "id": 1
-    }
+    # adapted from RENDER_STEREO_MODE (found in xbmc/rendering/RenderSystem.h)
+    THREE_D_MODE_MAPPING = [
+        Display3dMode.OFF,                    # RENDER_STEREO_MODE_OFF
+        Display3dMode.TOP_BOTTOM,             # RENDER_STEREO_MODE_SPLIT_HORIZONTAL
+        Display3dMode.SIDE_SIDE_HALF,         # RENDER_STEREO_MODE_SPLIT_VERTICAL
+        Display3dMode.OFF,                    # RENDER_STEREO_MODE_ANAGLYPH_RED_CYAN        no h/w support needed
+        Display3dMode.OFF,                    # RENDER_STEREO_MODE_ANAGLYPH_GREEN_MAGENTA   no h/w support needed
+        Display3dMode.OFF,                    # RENDER_STEREO_MODE_ANAGLYPH_YELLOW_BLUE     no h/w support needed
+        Display3dMode.LINE_INTERLEAVE_HALF,   # RENDER_STEREO_MODE_INTERLACED
+        Display3dMode.CHECK_BOARD,            # RENDER_STEREO_MODE_CHECKERBOARD
+        Display3dMode.FRAME_SEQUENTIAL,       # RENDER_STEREO_MODE_HARDWAREBASED            TODO: correct?
+        Display3dMode.OFF                     # RENDER_STEREO_MODE_MONO                     display 3D movie as 2D
+    ]
 
     def __init__(self):
         xbmc.Player.__init__(self)
@@ -121,23 +117,15 @@ class Service(xbmc.Player):
 
 
     def getStereoscopicMode(self):
-        for _ in range(WAIT_FOR_MODE_SELECT):
+        for _ in range(int(WAIT_FOR_MODE_SELECT / WAIT_FOR_MODE_SELECT_INTERVAL)):
             try:
-                res = json.loads(xbmc.executeJSONRPC(json.dumps(self.JSONRPC_QUERY, encoding='utf-8')))
-                tools.notifyLog(str(res), level=xbmc.LOGNOTICE)
-                tools.notifyLog("Stereo mode: " + xbmc.getInfoLabel("System.StereoscopicMode"), level=xbmc.LOGNOTICE)
-                if 'result' in res and 'stereoscopicmode' in res['result']:
-                    res = res['result']['stereoscopicmode'].get('mode')
-                    mapped = self.THREE_D_MODE_MAPPING[res]
-                    if self.mode3D != mapped:
-                        self.mode3D = mapped
-                        tools.notifyLog('Stereoscopic mode has changed to %s' % (Display3dMode.to_string(self.mode3D)))
-                        return True
-                    if self.monitor.waitForAbort(0.5):
-                        raise SystemExit
-                else:
-                    tools.notifyLog('Could not determine stereoscopic mode: stereoscopicmode not in result or result missing in JSON RPC response')
-                    return False
+                mode = self.THREE_D_MODE_MAPPING[int(xbmc.getInfoLabel("System.StereoscopicMode"))]
+                if self.mode3D != mode:
+                    self.mode3D = mode
+                    tools.notifyLog('Stereoscopic mode has changed to %s' % (Display3dMode.to_string(self.mode3D)))
+                    return True
+                if self.monitor.waitForAbort(WAIT_FOR_MODE_SELECT_INTERVAL):
+                    raise SystemExit
             except SystemExit:
                 tools.notifyLog('System will terminate this script, closing it.', level=xbmc.LOGERROR)
                 return False
