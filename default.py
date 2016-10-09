@@ -32,6 +32,23 @@ __IconDefault__ = xbmc.translatePath(os.path.join(__path__,'resources', 'media',
 __IconKodi__ = xbmc.translatePath(os.path.join(__path__, 'resources', 'media', 'kodi.png'))
 
 class Service(xbmc.Player):
+    THREE_D_MODE_MAPPING = {
+        "off": Display3dMode.OFF,
+        "split_vertical": Display3dMode.SIDE_SIDE_HALF,
+        "split_horizontal": Display3dMode.TOP_BOTTOM,
+        "row_interleaved": Display3dMode.LINE_INTERLEAVE_HALF,
+        "hardware_based": Display3dMode.FRAME_SEQUENTIAL,       # TODO: correct?
+        "anaglyph_cyan_red": Display3dMode.OFF,                 # works without 3D mode set
+        "anaglyph_green_magenta": Display3dMode.OFF,            # works without 3D mode set
+        "monoscopic": Display3dMode.OFF
+    }
+    JSONRPC_QUERY = {
+            "jsonrpc": "2.0",
+            "method": "GUI.GetProperties",
+            "params": {"properties": ["stereoscopicmode"]},
+            "id": 1
+    }
+
     def __init__(self):
         xbmc.Player.__init__(self)
         self.monitor = xbmc.Monitor()
@@ -104,43 +121,31 @@ class Service(xbmc.Player):
 
 
     def getStereoscopicMode(self):
-        mode = {
-            "off": Display3dMode.OFF,
-            "split_vertical": Display3dMode.SIDE_SIDE_HALF,
-            "split_horizontal": Display3dMode.TOP_BOTTOM,
-            "row_interleaved": Display3dMode.LINE_INTERLEAVE_HALF,
-            "hardware_based": Display3dMode.FRAME_SEQUENTIAL,       # TODO: correct?
-            "anaglyph_cyan_red": Display3dMode.OFF,                 # works without 3D mode set
-            "anaglyph_green_magenta": Display3dMode.OFF,            # works without 3D mode set
-            "monoscopic": Display3dMode.OFF
-        }
-        query = {
-                "jsonrpc": "2.0",
-                "method": "GUI.GetProperties",
-                "params": {"properties": ["stereoscopicmode"]},
-                "id": 1
-        }
-        _poll = WAIT_FOR_MODE_SELECT
-        while _poll > 0:
+        for _ in range(WAIT_FOR_MODE_SELECT):
             try:
-                res = json.loads(xbmc.executeJSONRPC(json.dumps(query, encoding='utf-8')))
+                res = json.loads(xbmc.executeJSONRPC(json.dumps(self.JSONRPC_QUERY, encoding='utf-8')))
+                tools.notifyLog(str(res), level=xbmc.LOGNOTICE)
+                tools.notifyLog("Stereo mode: " + xbmc.getInfoLabel("System.StereoscopicMode"), level=xbmc.LOGNOTICE)
                 if 'result' in res and 'stereoscopicmode' in res['result']:
                     res = res['result']['stereoscopicmode'].get('mode')
-                    if self.mode3D != mode[res]:
-                        tools.notifyLog('Stereoscopic mode has changed to %s' % (Display3dMode.to_string(mode[res])))
-                        self.mode3D = mode[res]
+                    mapped = self.THREE_D_MODE_MAPPING[res]
+                    if self.mode3D != mapped:
+                        self.mode3D = mapped
+                        tools.notifyLog('Stereoscopic mode has changed to %s' % (Display3dMode.to_string(self.mode3D)))
                         return True
-                    _poll -= 1
-                    xbmc.sleep(1000)
+                    if self.monitor.waitForAbort(0.5):
+                        raise SystemExit
                 else:
-                    break
+                    tools.notifyLog('Could not determine stereoscopic mode: stereoscopicmode not in result or result missing in JSON RPC response')
+                    return False
             except SystemExit:
                 tools.notifyLog('System will terminate this script, closing it.', level=xbmc.LOGERROR)
-                break
+                return False
             except Exception as e:
-                tools.notifyLog("Could not determine stereoscopic mode: %s", e)
+                tools.notifyLog("Could not determine stereoscopic mode: %s" % e, level=xbmc.LOGERROR)
+                return False
 
-        tools.notifyLog('Could not determine steroscopic mode', level=xbmc.LOGERROR)
+        # no 3D mode change happened
         return False
 
     def onPlayBackStarted(self):
@@ -168,7 +173,7 @@ class Service(xbmc.Player):
 
     def switch3D(self, auto_pause):
         if self.getStereoscopicMode():
-            tools.notifyLog('switching to 3D mode %s' % self.mode3D)
+            tools.notifyLog('Switching to 3D mode %s' % Display3dMode.to_string(self.mode3D))
             if auto_pause:
                 # pause playback during switching
                 self.pause()
