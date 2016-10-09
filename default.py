@@ -119,6 +119,10 @@ class Service(xbmc.Player):
     def getStereoscopicMode(self):
         for _ in range(int(WAIT_FOR_MODE_SELECT / WAIT_FOR_MODE_SELECT_INTERVAL)):
             try:
+                # VideoPlayer.StereoscopicMode returns the _currently played_ video's 3D mode as a string (left_right etc.)
+                # However, if the video is rendered in another mode (e.g. SBS video rendered as TAB by Kodi), this will
+                # result in a wrong 3D mode switch.
+                # System.StereoscopicMode returns a str(int) giving the GUI's _current_ 3D mode, which is exactly what we need.
                 mode = self.THREE_D_MODE_MAPPING[int(xbmc.getInfoLabel("System.StereoscopicMode"))]
                 if self.mode3D != mode:
                     self.mode3D = mode
