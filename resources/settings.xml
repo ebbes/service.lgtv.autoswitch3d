@@ -7,4 +7,8 @@
     <setting type="sep" />
     <setting id="lg_host" type="text" label="30010" default="" />
     <setting id="lg_pairing_key" type="text" label="30011" default="" />
+    <setting type="sep" />
+    <setting id="lg_pause_while_switching" label="30017" type="bool" default="true" />
+    <setting id="lg_switch_on_pause" label="30015" type="bool" default="true" />
+    <setting id="lg_switch_on_resume" label="30016" type="bool" default="true" />
 </settings>

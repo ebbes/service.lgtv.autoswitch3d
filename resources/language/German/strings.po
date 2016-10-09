@@ -53,6 +53,18 @@ msgctxt "#30014"
 msgid "Always force automatic discovery (useful if TV has no fixed IP)"
 msgstr "Immer automatische Suche verwenden (nützlich, falls der TV keine feste IP hat)"
 
+msgctxt "#30015"
+msgid "Re-switch to correct 3D mode when pausing playback"
+msgstr "Korrekten 3D-Modus beim Pausieren neu setzen"
+
+msgctxt "#30016"
+msgid "Re-switch to correct 3D mode when resuming playback"
+msgstr "Korrekten 3D-Modus beim Fortsetzen neu setzen"
+
+msgctxt "#30017"
+msgid "Pause playback during 3D switching"
+msgstr "Wiedergabe während des 3D-Wechsels pausieren"
+
 #scanning strings
 
 msgctxt "#30050"
