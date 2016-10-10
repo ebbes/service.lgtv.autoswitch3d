@@ -60,11 +60,11 @@ class Service(xbmc.Player):
         self.lg_host = __addon__.getSetting('lg_host')
         self.lg_host = None if self.lg_host == '' else self.lg_host
         self.lg_pairing_key = __addon__.getSetting('lg_pairing_key')
-        self.enable_discovery = __addon__.getSetting('lg_enable_discovery')
-        self.force_discovery = __addon__.getSetting('lg_force_discovery')
-        self.switch_on_pause = __addon__.getSetting('lg_switch_on_pause')
-        self.switch_on_resume = __addon__.getSetting('lg_switch_on_resume')
-        self.pause_while_switching = __addon__.getSetting('lg_pause_while_switching')
+        self.enable_discovery = __addon__.getSetting('lg_enable_discovery') == 'true'
+        self.force_discovery = __addon__.getSetting('lg_force_discovery') == 'true'
+        self.switch_on_pause = __addon__.getSetting('lg_switch_on_pause') == 'true'
+        self.switch_on_resume = __addon__.getSetting('lg_switch_on_resume') == 'true'
+        self.pause_while_switching = __addon__.getSetting('lg_pause_while_switching') == 'true'
 
         host_was_empty = self.lg_host is None or self.force_discovery
         if host_was_empty and self.enable_discovery:
@@ -72,7 +72,7 @@ class Service(xbmc.Player):
 
         if self.lg_host is None:
             # no host found
-            tools.notifyLog("No LG TV found on network and no TV is configured in settings")
+            tools.notifyLog("No LG TV found on network and no TV is configured in settings", level=xbmc.LOGWARNING)
             tools.notifyOSD(__addonname__, __LS__(30101), icon=__IconError__)
             self.abortRequested = True
             return
